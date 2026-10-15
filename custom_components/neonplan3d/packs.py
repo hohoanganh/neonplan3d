@@ -200,6 +200,13 @@ def parts_of(text: str) -> tuple[dict[str, Any], dict[str, str]]:
     return data["payload"], {"key": sig["key"], "sig": sig["sig"]}
 
 
+def _unknown_value(err: vol.Invalid) -> bool:
+    """Whether validation failed on a value outside a known list. Probatio (HA 2026.9+) marks this with the
+    code "not_in_list"; voluptuous only says so in the message, whose wording Probatio keeps."""
+    errors = getattr(err, "errors", None) or [err]
+    return any(getattr(e, "code", None) == "not_in_list" or "value must be one of" in str(e) for e in errors)
+
+
 def validate_payload(payload: Any) -> dict[str, Any]:
     """Check the content of a pack (without its signature); raises PackError."""
     features = payload.get("features") if isinstance(payload, dict) else None
@@ -212,7 +219,7 @@ def validate_payload(payload: Any) -> dict[str, Any]:
         clean = PAYLOAD_SCHEMA(payload)
     except vol.Invalid as err:
         # a value this version does not know yet (a new item kind of a newer pack release)
-        if "value must be one of" in str(err):
+        if _unknown_value(err):
             raise PackError("needs_update", str(err)) from err
         raise PackError("invalid_content", str(err)) from err
     ids = [item["id"] for item in clean["items"]]

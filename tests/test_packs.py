@@ -201,3 +201,18 @@ def test_feature_packs_need_no_items_but_a_pack_needs_something() -> None:
         packs.validate_payload({**pro, "features": ["some_future_addon"]})
     assert err.value.code == "needs_update"
     assert err.value.detail == "some_future_addon"
+
+
+def test_unknown_values_of_a_newer_pack_ask_for_an_update() -> None:
+    """A value this version does not know (a new part shape) asks for an update, on voluptuous and Probatio."""
+    item = copy.deepcopy(PAYLOAD["items"][0])
+    item["parts"][0]["shape"] = "some_future_shape"
+    with pytest.raises(packs.PackError) as err:
+        packs.validate_payload({**PAYLOAD, "items": [item]})
+    assert err.value.code == "needs_update"
+    # other broken content stays an error of the pack
+    item["parts"][0]["shape"] = "box"
+    item["parts"][0]["rot"] = 400
+    with pytest.raises(packs.PackError) as err:
+        packs.validate_payload({**PAYLOAD, "items": [item]})
+    assert err.value.code == "invalid_content"

@@ -6,6 +6,7 @@ stores so frequent saves from the editor never rewrite the large image data.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from typing import Any
@@ -79,11 +80,21 @@ async def async_migrate_legacy_stores(hass: HomeAssistant) -> None:
         _LOGGER.info("Took over the data of %s: %s", LEGACY_DOMAIN, ", ".join(copied))
 
 
+# Since HA 2025.12 a store builds its JSON in the event loop unless told otherwise. The images and the restore
+# points can be megabytes, so they are serialised in the executor, as every HA before 2025.12 did anyway; what
+# they save is always a fresh copy, so the executor never sees a dict that changes under it.
+_OFF_LOOP: dict[str, Any] = (
+    {"serialize_in_event_loop": False}
+    if "serialize_in_event_loop" in inspect.signature(Store.__init__).parameters
+    else {}
+)
+
+
 def _stores(hass: HomeAssistant) -> tuple[Store, Store, Store, Store]:
     return (
         _BuildingStore(hass, STORAGE_VERSION, STORAGE_KEY_BUILDING, minor_version=STORAGE_MINOR_VERSION),
-        Store(hass, STORAGE_VERSION, STORAGE_KEY_IMAGES),
-        Store(hass, STORAGE_VERSION, STORAGE_KEY_HISTORY),
+        Store(hass, STORAGE_VERSION, STORAGE_KEY_IMAGES, **_OFF_LOOP),
+        Store(hass, STORAGE_VERSION, STORAGE_KEY_HISTORY, **_OFF_LOOP),
         Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS),
     )
 
@@ -163,7 +174,7 @@ class FloorplanData:
             }
         )
         self._history = self._history[-HISTORY_MAX:]
-        await self._history_store.async_save({"snapshots": self._history})
+        await self._history_store.async_save({"snapshots": list(self._history)})
 
     def history(self) -> list[dict[str, Any]]:
         """Restore points, newest first, without their buildings."""
@@ -227,4 +238,4 @@ class FloorplanData:
             await self._save_images()
 
     async def _save_images(self) -> None:
-        await self._image_store.async_save({"images": self._images})
+        await self._image_store.async_save({"images": dict(self._images)})

@@ -39,6 +39,20 @@ jobs:
       - run: mypy custom_components/neonplan3d
       - run: pytest -q
 
+  # The job above gets the newest test harness that still runs on Python 3.13, which is HA 2026.2. Home Assistant
+  # needs Python 3.14 since 2026.3, so the tests run again on the current release (Probatio instead of voluptuous
+  # since 2026.9, among others). Lint and types stay above: the type hints of HA 2026.9+ expect Probatio markers.
+  python-current-ha:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r requirements_test.txt
+      - run: python -c "from homeassistant.const import __version__; print('Home Assistant', __version__)"
+      - run: pytest -q
+
   hassfest:
     runs-on: ubuntu-latest
     steps:
